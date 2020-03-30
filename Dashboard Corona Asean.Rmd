@@ -1,0 +1,425 @@
+---
+title: "Dashboard Coronvirus Indonesia Dan Asean"
+author: "Ahmad Sopian"
+date: "27/3/2020"
+output:
+    flexdashboard::flex_dashboard:
+      orientation: rows
+      source_code: embed
+      verical_layout: fill
+---
+
+```{r setup, include=FALSE}
+#-------------package----------
+library(flexdashboard)
+#install.packages("devtools")
+#devtools::install_github("RamiKrispin/coronavirus", force = TRUE)
+library(coronavirus)
+data("coronavirus")
+#update_datasets()
+View(coronavirus)
+max(coronavirus$date)
+
+
+`%>%` <- magrittr::`%>%`
+#------------------parameter-------------
+#set color
+#https ://www.w3.org/TR/css-color-3/#svg-color
+confirmed_color <- "red"
+active_color <- "#1f77b4"
+recovered_color <- "forestgreen"
+death_color <- "purple"
+#-------------------data------------
+df <- coronavirus %>%
+  #dplyr::filter(date == max(date)) %>%
+  dplyr::filter(Country.Region == "Indonesia") %>%
+  dplyr::group_by(Country.Region, type) %>%
+  dplyr::summarise(total = sum(cases)) %>%
+  tidyr::pivot_wider(
+    names_from = type,
+    values_from = total
+  ) %>%
+  #dplyr::mutate*unrecovered = confirmed - ifelse(is.na(recovered), 0, recovered) - ifelse(is.na(death), 0, death) %>%
+  dplyr::mutate(unrecovered = confirmed - ifelse(is.na(death),0,death)) %>%
+  dplyr::arrange(-confirmed) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(country = dplyr::if_else(Country.Region == "United Arab Emirates", "UAE", Country.Region)) %>%
+  dplyr::mutate(country = dplyr::if_else(country == "Mainland China", "China", country)) %>%
+  dplyr::mutate(country = dplyr::if_else(country == "North Macedonia", "N.Macedonia",country)) %>%
+  dplyr::mutate(country = trimws(country)) %>%
+  dplyr::mutate(country = factor(country, levels = country))
+
+df_daily <- coronavirus %>% 
+  dplyr::filter(Country.Region == "Indonesia") %>% 
+  dplyr::group_by(date, type) %>%
+  dplyr::summarise(total = sum(cases, na.rm = TRUE)) %>%
+  tidyr::pivot_wider(
+    names_from = type,
+    values_from = total
+  ) %>%
+  dplyr::arrange(date) %>%
+  dplyr::ungroup() %>%
+  #dplyr::mutate(active = confirmed - death - recovered) %>%
+  dplyr::mutate(active = confirmed - death) %>%
+  dplyr::mutate(
+    confirmed_cum = cumsum(confirmed), 
+    death_cum = cumsum(death),
+    #recovered_cum = cumsum(recovered),
+    active_cum = (cumsum(active))
+  )
+
+
+df1 <- coronavirus %>% dplyr::filter(date == max(date))
+```
+
+
+Ringkasan
+==================================
+Row {data-width=400}
+----------------------------------
+### confirmed {.value-box}
+  
+```{r}
+
+valueBox(
+  value = paste(format(sum(df$confirmed), big.mark = ","), "", sep = " "),
+  caption = "Jumlah Kasus Postif Covid-19",
+  icon = "fas fa-user-md",
+  color = confirmed_color
+)
+```
+<!-- ### active {.value-box} -->
+
+<!-- ```{r} -->
+<!-- valueBox( -->
+<!--   value = paste(format(sum(df$unrecovered, na.rm = TRUE), big.mark = ","), " (", -->
+<!--     round(100 * sum(df$unrecovered, na.rm = TRUE) / sum(df$confirmed), 1), -->
+<!--     "%)", -->
+<!--     sep = "" -->
+<!--   ), -->
+<!--   caption = "Active cases (% of total cases)", icon = "fas fa-ambulance", -->
+<!--   color = active_color -->
+<!-- ) -->
+<!-- ``` -->
+
+
+### death {.value-box}
+```{r}
+
+valueBox(
+  value = paste(format(sum(df$death, na.rm = TRUE), big.mark = ","), " (",
+    round(100 * sum(df$death, na.rm = TRUE) / sum(df$confirmed), 1),
+    "%)",
+    sep = ""
+  ),
+  caption = "Kasus Kematian Covid-19 (Persentase Kematian)",
+  icon = "fas fa-heart-broken",
+  color = death_color
+)
+```
+
+Row
+-------------------------------------------------------------------
+### **Kumulatif Kasus Positif Covid-19 Di Indonesia** 
+
+```{r}
+plotly::plot_ly(data=df_daily) %>%
+  plotly::add_trace(
+    x = ~date,
+    # y = ~active_cum,
+    y = ~confirmed_cum,
+    type = "scatter",
+    mode = "lines+makers",
+    # name = "active",
+    name = "Positif Covid-19",
+    line = list(color = active_color),
+    marker = list(color = active_color)
+  ) %>%
+  plotly::add_trace(
+    x = ~date,
+    y = ~death_cum,
+    type = "scatter",
+    mode = "lines+markers",
+    name = "Kematian",
+    line = list(color = death_color),
+    mmarker = list(color = death_color)
+  ) %>%
+  plotly::add_annotations(
+    x = as.Date("2020-03-02"),
+    y = 1,
+    text = paste("Kasus Pertama",
+                 "<br>",
+                 "Positif Covid-19"),
+    xref = "x",
+    yref = "y",
+    arrowhead = 3,
+    arrowhead = 3,
+    arrowsize = 1,
+    showarrow = TRUE,
+    ax = -100,
+    ay = -120
+  ) %>%
+  plotly::add_annotations(
+    x = as.Date("2020-03-11"),
+    y = 3,
+    text = paste("Kematian Pertama",
+                 "<br>",
+                 "Pasien Positif Covid-19"),
+    xref = "x",
+    yref = "y",
+    arrowhead = 3,
+    arrowhead = 3,
+    arrowsize = 1,
+    arrowrow = TRUE,
+    ax = -40,
+    ay = -90
+  ) %>%
+  plotly::add_annotations(
+    x = as.Date("2020-03-26"),
+    y = 893,
+    text = paste("Positif Covid-19",
+                 "<br>",
+                 "Tanggal (26/03)"),
+    xref = "x",
+    yref = "y",
+    arrowhead = 5,
+    arrowhead = 3,
+    arrowsize = 1,
+    showarrow = TRUE,
+    ax = -90,
+    ay = -90
+  ) %>%
+  plotly::layout(
+    title = "",
+    yaxis = list(title = "Angka Kumulatif Kasus Covid-19"),
+    xaxis = list(title = "Tanggal"),
+    legend = list(x = 0.1, y = 0.9),
+    hovermode = "compare"
+  )
+```
+
+Perbandingan
+===============================================================
+
+Column {data-width=400}
+------------------------------
+
+### **Tambahan Kasus Per-Hari Positif Covid-19 Asean**
+
+```{r}
+daily_confirmed <- coronavirus %>%
+  dplyr::filter(type == "confirmed") %>%
+  dplyr::filter(date >= "2020-03-02") %>%
+  dplyr::mutate(country = Country.Region) %>%
+  dplyr::group_by(date, country) %>%
+  dplyr::summarise(total = sum(cases)) %>%
+  dplyr::ungroup() %>%
+  tidyr::pivot_wider(names_from = country, values_from = total)
+
+#-----------------------------------------
+# plotting data
+
+daily_confirmed %>%
+  plotly::plot_ly() %>%
+  plotly::add_trace(
+    x = ~date,
+    y = ~Indonesia,
+    type = "scatter",
+    mode = "lines+markers",
+    name = "Indonesia"
+  ) %>%
+  plotly::add_trace(
+    x = ~date,
+    y = ~Malaysia,
+    type = "scatter",
+    mode = "lines+markers",
+    name = "Malaysia"
+  ) %>%
+  plotly::add_trace(
+    x = ~date,
+    y = ~Singapore,
+    type = "scatter",
+    mode = "lines+markers",
+    name = "Singapore"
+  ) %>%
+  plotly::add_trace(
+    x = ~date,
+    y = ~Philippines,
+    type = "scatter",
+    mode = "lines+markers",
+    name = "Filipina"
+  ) %>%
+  plotly::add_trace(
+    x = ~date,
+    y = ~Thailand,
+    type = "scatter",
+    mode = "lines+markers",
+    name = "Thailand"
+  ) %>%
+  plotly::add_trace(
+    x = ~date,
+    y = ~Brunei,
+    type = "scatter",
+    mode = "lines+markers",
+    name = "Brunei Darusallam"
+  ) %>%
+  plotly::add_trace(
+    x = ~date,
+    y = ~Vietnam,
+    type = "scatter",
+    mode = "lines+markers",
+    name = "Vietnam"
+  ) %>%
+  plotly::add_trace(
+    x = ~date,
+    y = ~Laos,
+    type = "scatter",
+    mode = "lines+markers",
+    name = "Laos"
+  ) %>%
+  plotly::add_trace(
+    x = ~date,
+    y = ~Cambodia,
+    type = "scatter",
+    mode = "lines+markers",
+    name = "Kamboja"
+  ) %>%
+  plotly::layout(
+    title = "",
+    legend = list(x = 0.1, y = 0.9),
+    yaxis = list(title = "Angka Kasus Positif Covid-19 (ASEAN)"),
+    xaxis = list(title = "Tanggal"),
+    #paper_bgcolor = "black",
+    #plot_bgcolor = "black",
+    #font = list(color = "white"),
+    hovermode = "compare",
+    margin = list(
+      # l = 60,
+      # r = 40,
+      b = 10,
+      t = 10,
+      pad = 2
+    )
+  )
+```
+
+### **Kumulatif Jumlah Kasus Positif Covid-19 ASEAN**
+
+```{r daily_summary}
+df_Asean <- coronavirus %>%
+  # dplyr::filter(Country.Region == max(date)) %>%
+  dplyr::filter(Country.Region == "Indonesia" |
+                  Country.Region == "Malaysia" |
+                  Country.Region == "Singapore" |
+                  Country.Region == "Philippines" |
+                  Country.Region == "Thailand" |
+                  Country.Region == "Brunei" |
+                  Country.Region == "Vietnam" | 
+                  Country.Region == "Laos" |
+                  Country.Region == "Cambodia") %>%
+  dplyr::group_by(Country.Region, type) %>%
+  dplyr::summarise(total = sum(cases)) %>%
+  tidyr::pivot_wider(
+    names_from = type,
+    values_from = total
+  ) %>%
+  # dplyr::mutate(unrecovered = confirmed - ifelse(is.na(recovered), 0, recovered) - ifelse(is.na(death), 0, death)) %>%
+  dplyr::mutate(unrecovered = confirmed - ifelse(is.na(death), 0, death)) %>%
+  dplyr::arrange(confirmed) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(country = dplyr::if_else(Country.Region == "United Arab Emirates", "UAE", Country.Region)) %>%
+  dplyr::mutate(country = dplyr::if_else(country == "Mainland China", "China", country)) %>%
+  dplyr::mutate(country = dplyr::if_else(country == "North Macedonia", "N.Macedonia", country)) %>%
+  dplyr::mutate(country = trimws(country)) %>%
+  dplyr::mutate(country = factor(country, levels = country))
+
+plotly::plot_ly(
+  data = df_Asean,
+  x = ~country,
+  # y = ~unrecovered,
+  y = ~confirmed,
+  # text = ~confirmed,
+  # textposition = 'auto',
+  type = "bar",
+  name = "Positif Covid-19",
+  marker = list(color = active_color)
+) %>%
+  plotly::add_trace(
+    y = ~death,
+    # text = ~death,
+    # textposition = 'auto',
+    name = "Kematian Karena Covid-19",
+    marker = list(color = death_color)
+  ) %>%
+  plotly::layout(
+    barmode = "stack",
+    yaxis = list(title = "Angka Kumulatif Positif Covid-19"),
+    xaxis = list(title = ""),
+    hovermode = "compare",
+    margin = list(
+      # l = 60,
+      # r = 40,
+      b = 10,
+      t = 10,
+      pad = 2
+    )
+  )
+```
+
+Peta
+==================================================
+
+### **Peta ASEAN Kasus Covid-19** (*Gunakan (+) atau (-) icons untuk zoom in/out*)
+
+```{r}
+library(leaflet)
+library(leafpop)
+library(purrr)
+cv_data_plot_asean <- coronavirus %>%
+  dplyr::filter(Country.Region == "Indonesia" |
+                  Country.Region == "Malaysia" |
+                  Country.Region == "Singapore" |
+                  Country.Region == "Philippines" |
+                  Country.Region == "Thailand" |
+                  Country.Region == "Brunei" |
+                  Country.Region == "Vietnam" | 
+                  Country.Region == "Laos" |
+                  Country.Region == "Cambodia") %>%
+  dplyr::filter(cases > 0) %>%
+  dplyr::group_by(Country.Region, Province.State, Lat, Long, type) %>%
+  dplyr::summarise(cases = sum(cases)) %>%
+  dplyr::mutate(log_cases = 2 * log(cases)) %>%
+  dplyr::ungroup()
+cv_data_plot_asean.split <- cv_data_plot_asean %>% split(cv_data_plot_asean$type)
+pal <- colorFactor(c("orange", "red", "green"), domain = c("confirmed","death","recovered"))
+map_object <- leaflet() %>% addProviderTiles(providers$Stamen.Toner)
+names(cv_data_plot_asean.split) %>%
+  purrr::walk(function(df){
+    map_object <<- map_object %>%
+      addCircleMarkers(
+        data = cv_data_plot_asean.split[[df]],
+        lng = ~Long, lat = ~Lat,
+        # label=~as.character(cases),
+        color = ~pal(type),
+        stroke = FALSE,
+        fillOpacity = 0.8,
+        radius = ~log_cases,
+        popup = leafpop::popupTable(cv_data_plot_asean.split[[df]],
+                                    feature.id = FALSE,
+                                    row.numbers = FALSE,
+                                    zcol = c("type","cases","Country.Region", "Province.State")
+                                    ),
+        group = df,
+        # clusterOptions = markerClusterOptions(removeOutsideVisibleBounds = F),
+        labelOptions = labelOptions(
+          noHide = F,
+          direction = "auto"
+        )
+      )
+  })
+map_object %>%
+  addLayersControl(
+    overlayGroups = names(cv_data_plot_asean.split),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+```
